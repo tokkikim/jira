@@ -1,9 +1,11 @@
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, render_template
 from typing import Any, Dict, List, Optional
 from app.controllers.timeline_controller import (
     search_issues_with_overlays,
     build_timeline_view,
 )
+
+# from app.services.jira_client import get_projects
 from datetime import datetime
 
 # Logging additions
@@ -77,10 +79,44 @@ def _log_request_end(response):
     return response
 
 
+@app.errorhandler(404)
+def not_found_error(error):
+    return (
+        render_template(
+            "error.html",
+            error_code=404,
+            error_message="페이지를 찾을 수 없습니다",
+            error_description="요청하신 페이지가 존재하지 않습니다.",
+        ),
+        404,
+    )
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    return (
+        render_template(
+            "error.html",
+            error_code=500,
+            error_message="서버 오류",
+            error_description="서버에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+        ),
+        500,
+    )
+
+
 @app.errorhandler(Exception)
 def _log_exception(e):
     app.logger.exception("Unhandled error at %s %s", request.method, request.path)
-    return jsonify({"error": str(e)}), 500
+    return (
+        render_template(
+            "error.html",
+            error_code=500,
+            error_message="예상치 못한 오류",
+            error_description="예상치 못한 오류가 발생했습니다.",
+        ),
+        500,
+    )
 
 
 def _parse_iso_date(s: Optional[str]) -> Optional[datetime]:
@@ -167,105 +203,81 @@ def api_timeline():
         return jsonify({"error": str(e)}), 500
 
 
+@app.get("/api/projects")
+def api_projects():
+    try:
+        # 임시 샘플 프로젝트 데이터
+        sample_projects = [
+            {
+                "key": "SR",
+                "name": "Sample Project",
+                "projectTypeKey": "software",
+                "simplified": False,
+            },
+            {
+                "key": "AB",
+                "name": "Another Project",
+                "projectTypeKey": "software",
+                "simplified": False,
+            },
+            {
+                "key": "TEST",
+                "name": "Test Project",
+                "projectTypeKey": "software",
+                "simplified": False,
+            },
+        ]
+        return jsonify({"projects": sample_projects})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.get("/")
 def index():
-    # Minimal HTML page with controls and timeline rendering
-    html = """
-<!doctype html>
-<html lang=\"ko\">
-<head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>Timeline</title>
-  <link rel=\"stylesheet\" href=\"https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css\" />
-  <style>
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
-    header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    label { font-size: 12px; color: #374151; }
-    input, select, button { font-size: 14px; padding: 6px 8px; }
-    #app { height: calc(100vh - 58px); }
-    .vis-item.vis-range { border-radius: 6px; }
-  </style>
-</head>
-<body>
-  <header>
-    <label>Projects <input id=\"projects\" placeholder=\"SR,AB\" /></label>
-    <label>Group <select id=\"group_by\"><option value=\"project\">Project</option><option value=\"assignee\">Assignee</option></select></label>
-    <label>From <input id=\"from_date\" type=\"date\" /></label>
-    <label>To <input id=\"to_date\" type=\"date\" /></label>
-    <button id=\"load\">Load</button>
-    <span style=\"margin-left:auto;font-size:12px;color:#6b7280;\">Read-only · Local overlays</span>
-  </header>
-  <div id=\"app\"></div>
+    return render_template("index.html")
 
-  <script src=\"https://unpkg.com/vis-data@latest/peer/umd/vis-data.min.js\"></script>
-  <script src=\"https://unpkg.com/vis-timeline@latest/peer/umd/vis-timeline-graph2d.min.js\"></script>
-  <script>
-    const qs = new URLSearchParams(window.location.search);
-    document.getElementById('projects').value = qs.get('projects') || (qs.get('project') || '');
-    document.getElementById('group_by').value = qs.get('group_by') || 'project';
-    if (qs.get('from_date')) document.getElementById('from_date').value = qs.get('from_date');
-    if (qs.get('to_date')) document.getElementById('to_date').value = qs.get('to_date');
 
-    async function load() {
-      const projects = document.getElementById('projects').value.trim();
-      const group_by = document.getElementById('group_by').value;
-      const from_date = document.getElementById('from_date').value;
-      const to_date = document.getElementById('to_date').value;
-      const url = new URL('/api/timeline', window.location.origin);
-      if (projects) url.searchParams.set('projects', projects);
-      url.searchParams.set('group_by', group_by);
-      if (from_date) url.searchParams.set('from_date', from_date);
-      if (to_date) url.searchParams.set('to_date', to_date);
-      const res = await fetch(url);
-      const data = await res.json();
-      renderTimeline(data);
-      const newQs = new URLSearchParams();
-      if (projects) newQs.set('projects', projects);
-      newQs.set('group_by', group_by);
-      if (from_date) newQs.set('from_date', from_date);
-      if (to_date) newQs.set('to_date', to_date);
-      history.replaceState(null, '', `/?${newQs.toString()}`);
+@app.get("/api/docs")
+def api_docs():
+    return render_template("api_docs.html")
+
+
+@app.get("/api/sample")
+def api_sample():
+    """테스트용 샘플 데이터를 반환합니다."""
+    sample_data = {
+        "groups": [
+            {"id": "SR", "title": "SR · Sample Project"},
+            {"id": "AB", "title": "AB · Another Project"},
+        ],
+        "items": [
+            {
+                "id": "SR-100",
+                "group": "SR",
+                "content": "샘플 이슈 1",
+                "start": "2024-01-15",
+                "end": "2024-01-20",
+                "color": "#ff6b6b",
+            },
+            {
+                "id": "SR-101",
+                "group": "SR",
+                "content": "샘플 이슈 2",
+                "start": "2024-01-18",
+                "end": "2024-01-25",
+                "color": "#4ecdc4",
+            },
+            {
+                "id": "AB-200",
+                "group": "AB",
+                "content": "다른 프로젝트 이슈",
+                "start": "2024-01-10",
+                "end": "2024-01-30",
+                "color": "#45b7d1",
+            },
+        ],
     }
-
-    function renderTimeline(data) {
-      const container = document.getElementById('app');
-      container.innerHTML = '';
-      const items = new vis.DataSet((data.items || []).map(it => ({
-        id: it.id,
-        group: it.group,
-        content: it.content,
-        start: it.start ? new Date(it.start) : null,
-        end: it.end ? new Date(it.end + 'T23:59:59') : null,
-        style: it.color ? `background-color:${it.color};border-color:${it.color};color:#111;` : ''
-      })));
-      const groups = new vis.DataSet(data.groups || []);
-      const today = new Date();
-      const startWindow = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 14);
-      const endWindow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 45);
-      const timeline = new vis.Timeline(container, items, groups, {
-        stack: true,
-        orientation: 'top',
-        multiselect: false,
-        showCurrentTime: true,
-        zoomKey: 'ctrlKey',
-        margin: { item: 6, axis: 12 },
-        min: startWindow,
-        max: endWindow,
-        timeAxis: { scale: 'day', step: 1 },
-        zoomMin: 1000 * 60 * 60 * 24,
-        zoomMax: 1000 * 60 * 60 * 24 * 365
-      });
-      timeline.addCustomTime(new Date(), 'now');
-    }
-
-    document.getElementById('load').addEventListener('click', load);
-    load();
-  </script>
-</body>
-</html>
-"""
-    return Response(html, mimetype="text/html")
+    return jsonify(sample_data)
 
 
 if __name__ == "__main__":

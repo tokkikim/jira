@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}JIRA Timeline{% endblock %}</title>
+    
+    <!-- 외부 라이브러리 CSS -->
+    {% block external_css %}{% endblock %}
+    
+    <!-- 내부 CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    {% block css %}{% endblock %}
+  </head>
+  <body>
+    {% block header %}{% endblock %}
+    
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+    
+    <!-- 외부 라이브러리 JavaScript -->
+    {% block external_js %}{% endblock %}
+    
+    <!-- 내부 JavaScript -->
+    {% block js %}{% endblock %}
+  </body>
+</html>
